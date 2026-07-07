@@ -1,0 +1,6 @@
+{
+  "name": "Suzuki Imóveis",
+  "description": "Plataforma premium para busca e administração de imóveis com alto padrão de qualidade para venda, locação e investimentos. Otimizada para hospedagem CPanel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

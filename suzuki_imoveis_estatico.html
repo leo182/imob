@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suzuki Imóveis - Credibilidade & Tradição</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS v3 Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'brand-gold': '#d4af37',
+            'brand-gold-dark': '#aa8416',
+            'gold': {
+              50: '#fbf9f1',
+              100: '#f5eecb',
+              200: '#eadc95',
+              300: '#dac353',
+              400: '#cca825',
+              500: '#aa8416',
+              600: '#85630e',
+              700: '#60440b',
+              800: '#3e2c0b',
+              900: '#211708',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- React & Babel Standalone CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f5f5f4;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #e7e5e4;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #d6d3d1;
+    }
+    html {
+      scroll-behavior: smooth;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #fcfbf9;
+    }
+  </style>
+</head>
+<body class="text-stone-800 antialiased selection:bg-brand-gold/20 selection:text-brand-gold-dark">
+
+  <div id="root"></div>
+
+  <!-- React Application Core -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // --- SUPABASE CLIENT & PERSISTENCE ---
+    const decryptCredentials = (encrypted) => {
+      try {
+        const raw_1 = decodeURIComponent(escape(atob(encrypted)));
+        const reversed = raw_1.split('').reverse().join('');
+        const raw_2 = decodeURIComponent(escape(atob(reversed)));
+        return JSON.parse(raw_2);
+      } catch (err) {
+        console.error("Erro ao decodificar credenciais ofuscadas:", err);
+        return null;
+      }
+    };
+
+    const encryptCredentials = (url, key) => {
+      const payload = JSON.stringify({ url, key });
+      const b64_1 = btoa(unescape(encodeURIComponent(payload)));
+      const reversed = b64_1.split('').reverse().join('');
+      return btoa(unescape(encodeURIComponent(reversed)));
+    };
+
+    const getSupabaseConfig = () => {
+      let url = localStorage.getItem('suzuki_sb_url') || '';
+      let key = localStorage.getItem('suzuki_sb_key') || '';
+      let enabled = localStorage.getItem('suzuki_sb_enabled') === 'true';
+
+      if ((!url || !key) && window.SUZUKI_SECURED_CONFIG) {
+        const decrypted = decryptCredentials(window.SUZUKI_SECURED_CONFIG);
+        if (decrypted && decrypted.url && decrypted.key) {
+          url = decrypted.url;
+          key = decrypted.key;
+          enabled = true;
+        }
+      }
+
+      return { url, key, enabled };
+    };
+
+    const saveSupabaseConfig = (url, key, enabled) => {
+      localStorage.setItem('suzuki_sb_url', url.trim());
+      localStorage.setItem('suzuki_sb_key', key.trim());
+      localStorage.setItem('suzuki_sb_enabled', enabled ? 'true' : 'false');
+    };
+
+    const getSupabaseClient = () => {
+      const { url, key, enabled } = getSupabaseConfig();
+      if (!enabled || !url || !key || !window.supabase) return null;
+      try {
+        return window.supabase.createClient(url, key, {
+          auth: { persistSession: false }
+        });
+      } catch (err) {
+        console.error('Erro ao inicializar Supabase client:', err);
+        return null;
+      }
+    };
+
+    const dbFetchProperties = async () => {
+      const client = getSupabaseClient();
+      if (!client) return null;
+      const { data, error } = await client.from('suzuki_properties').select('*').order('createdAt', { ascending: false });
+      if (error) throw error;
+      return data;
+    };
+
+    const dbSaveProperty = async (property) => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { error } = await client.from('suzuki_properties').upsert(property, { onConflict: 'id' });
+      if (error) throw error;
+    };
+
+    const dbDeleteProperty = async (id) => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { error } = await client.from('suzuki_properties').delete().eq('id', id);
+      if (error) throw error;
+    };
+
+    const dbFetchBookings = async () => {
+      const client = getSupabaseClient();
+      if (!client) return null;
+      const { data, error } = await client.from('suzuki_bookings').select('*').order('createdAt', { ascending: false });
+      if (error) throw error;
+      return data;
+    };
+
+    const dbSaveBooking = async (booking) => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { error } = await client.from('suzuki_bookings').upsert(booking, { onConflict: 'id' });
+      if (error) throw error;
+    };
+
+    const dbDeleteBooking = async (id) => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { error } = await client.from('suzuki_bookings').delete().eq('id', id);
+      if (error) throw error;
+    };
+
+    const dbSyncLocalToCloud = async (localProperties, localBookings) => {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Supabase não está configurado ou ativo.');
+      
+      let propertiesSynced = 0;
+      let bookingsSynced = 0;
+      
+      if (localProperties.length > 0) {
+        const { error } = await client.from('suzuki_properties').upsert(localProperties, { onConflict: 'id' });
+        if (error) throw error;
+        propertiesSynced = localProperties.length;
+      }
+      
+      if (localBookings.length > 0) {
+        const { error } = await client.from('suzuki_bookings').upsert(localBookings, { onConflict: 'id' });
+        if (error) throw error;
+        bookingsSynced = localBookings.length;
+      }
+      
+      return { propertiesSynced, bookingsSynced };
+    };
+
+    const testSupabaseConnection = async (url, key) => {
+      try {
+        if (!window.supabase) return false;
+        const client = window.supabase.createClient(url, key);
+        const { error } = await client.from('suzuki_properties').select('id').limit(1);
+        if (error && error.message.includes('API key')) return false;
+        return true;
+      } catch (err) {
+        return false;
+      }
+    };
+
+    const SUPABASE_SQL_SETUP = `-- Script SQL para criar as tabelas no Supabase
+-- Abra o painel do Supabase, clique em "SQL Editor" -> "New Query", cole o código abaixo e clique em "Run".
+
+CREATE TABLE IF NOT EXISTS public.suzuki_properties (
+  "id" TEXT PRIMARY KEY,
+  "code" TEXT NOT NULL UNIQUE,
+  "title" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "type" TEXT NOT NULL,
+  "propertyType" TEXT NOT NULL,
+  "price" NUMERIC NOT NULL,
+  "condo" NUMERIC DEFAULT 0,
+  "iptu" NUMERIC DEFAULT 0,
+  "bedrooms" NUMERIC NOT NULL,
+  "bathrooms" NUMERIC NOT NULL,
+  "suites" NUMERIC NOT NULL,
+  "garages" NUMERIC NOT NULL,
+  "area" NUMERIC NOT NULL,
+  "city" TEXT NOT NULL,
+  "neighborhood" TEXT NOT NULL,
+  "state" TEXT NOT NULL,
+  "address" TEXT NOT NULL,
+  "images" TEXT[] NOT NULL,
+  "featured" BOOLEAN DEFAULT FALSE,
+  "badge" TEXT NOT NULL,
+  "createdAt" TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.suzuki_bookings (
+  "id" TEXT PRIMARY KEY,
+  "propertyId" TEXT NOT NULL,
+  "propertyCode" TEXT NOT NULL,
+  "propertyTitle" TEXT NOT NULL,
+  "date" TEXT NOT NULL,
+  "timeSlot" TEXT NOT NULL,
+  "visitType" TEXT NOT NULL,
+  "clientName" TEXT NOT NULL,
+  "clientPhone" TEXT NOT NULL,
+  "clientEmail" TEXT NOT NULL,
+  "status" TEXT DEFAULT 'pendente',
+  "createdAt" TEXT NOT NULL
+);
+
+-- Ativar acesso público de leitura e escrita (RSL desativado ou liberado para teste rápido)
+ALTER TABLE public.suzuki_properties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suzuki_bookings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acesso público leitura para propriedades" ON public.suzuki_properties FOR SELECT USING (true);
+CREATE POLICY "Acesso público escrita para propriedades" ON public.suzuki_properties FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "Acesso público leitura para agendamentos" ON public.suzuki_bookings FOR SELECT USING (true);
+CREATE POLICY "Acesso público escrita para agendamentos" ON public.suzuki_bookings FOR ALL USING (true) WITH CHECK (true);
+`;
+
+    // --- INITIAL DATA BASE ---
+    const INITIAL_PROPERTIES = [
+      {
+        id: 'sz-001',
+        code: 'SZ101',
+        title: 'Casa Duplex de Alto Padrão em Condomínio Fechado',
+        description: 'Espetacular casa duplex com arquitetura moderna e acabamentos de altíssimo padrão. Amplo living integrado à área gourmet com piscina, churrasqueira e lindo paisagismo. No pavimento superior, são 4 suítes espaçosas.',
+        type: 'venda',
+        propertyType: 'casa',
+        price: 2450000,
+        condo: 850,
+        iptu: 320,
+        bedrooms: 4,
+        bathrooms: 5,
+        suites: 4,
+        garages: 4,
+        area: 320,
+        city: 'São Paulo',
+        neighborhood: 'Jardins',
+        state: 'SP',
+        address: 'Alameda Lorena, 1420',
+        images: [
+          'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80'
+        ],
+        featured: true,
+        badge: 'Pronto',
+        createdAt: '2026-06-15T10:00:00Z'
+      },
+      {
+        id: 'sz-002',
+        code: 'SZ102',
+        title: 'Apartamento Decorado com Vista Panorâmica',
+        description: 'Exclusivo apartamento mobiliado e decorado por arquiteto renomado. Sala integrada à varanda gourmet com vista espetacular para o skyline da cidade. Condomínio com lazer completo e segurança 24h.',
+        type: 'venda',
+        propertyType: 'apartamento',
+        price: 1380000,
+        condo: 1100,
+        iptu: 450,
+        bedrooms: 3,
+        bathrooms: 4,
+        suites: 3,
+        garages: 2,
+        area: 145,
+        city: 'São Paulo',
+        neighborhood: 'Pinheiros',
+        state: 'SP',
+        address: 'Rua Simão Álvares, 780',
+        images: [
+          'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80'
+        ],
+        featured: true,
+        badge: 'Pronto',
+        createdAt: '2026-06-20T11:30:00Z'
+      },
+      {
+        id: 'sz-003',
+        code: 'SZ103',
+        title: 'Moderna Cobertura Duplex no Coração do Batel',
+        description: 'Impecável cobertura duplex finamente acabada. No primeiro nível: living com lareira e suítes master. No segundo nível: amplo espaço gourmet com deck externo privativo contendo SPA aquecido.',
+        type: 'venda',
+        propertyType: 'apartamento',
+        price: 3200000,
+        condo: 1950,
+        iptu: 720,
+        bedrooms: 3,
+        bathrooms: 4,
+        suites: 2,
+        garages: 3,
+        area: 280,
+        city: 'Curitiba',
+        neighborhood: 'Batel',
+        state: 'PR',
+        address: 'Rua Bispo Dom José, 2100',
+        images: [
+          'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=80'
+        ],
+        featured: true,
+        badge: 'Pronto',
+        createdAt: '2026-06-28T09:15:00Z'
+      },
+      {
+        id: 'sz-004',
+        code: 'SZ104',
+        title: 'Apartamento Contemporâneo para Locação',
+        description: 'Excelente apartamento de 2 dormitórios super bem localizado, próximo a parques e metrô. Mobiliário moderno na cozinha e banheiros, sacada integrada com churrasqueira. Coworking no condomínio.',
+        type: 'aluguel',
+        propertyType: 'apartamento',
+        price: 3800,
+        condo: 480,
+        iptu: 120,
+        bedrooms: 2,
+        bathrooms: 2,
+        suites: 1,
+        garages: 1,
+        area: 68,
+        city: 'São Paulo',
+        neighborhood: 'Vila Mariana',
+        state: 'SP',
+        address: 'Rua Domingos de Morais, 1540',
+        images: [
+          'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1502672023488-70e25813eb80?auto=format&fit=crop&w=1200&q=80'
+        ],
+        featured: false,
+        badge: 'Pronto',
+        createdAt: '2026-07-01T14:20:00Z'
+      }
+    ];
+
+    const PRESET_IMAGE_OPTIONS = [
+      { label: 'Casa de Luxo (Externa)', url: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80' },
+      { label: 'Casa Moderna', url: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80' },
+      { label: 'Varanda / Piscina', url: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80' },
+      { label: 'Apartamento Sala', url: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1200&q=80' },
+      { label: 'Cozinha Gourmet', url: 'https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1200&q=80' }
+    ];
+
+    const CITIES_LIST = ['São Paulo', 'Curitiba', 'Campinas', 'Florianópolis'];
+
+    // --- VECTOR ICONS COMPONENT ---
+    function Icon({ name, className = "h-4 w-4" }) {
+      const paths = {
+        building: "M3 21h18 M3 10h18 M5 6h14 M4 21V10 M20 21V10 M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4 M14 6h.01 M10 6h.01",
+        key: "m21 2-2 2 M12 11l3.5-3.5 M15.5 7.5l1.5 1.5 M11 14a5.5 5.5 0 1 1-7.778 7.778A5.5 5.5 0 0 1 11 14z",
+        phone: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z",
+        home: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+        info: "M12 16v-4 M12 8h.01 M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10z",
+        mapPin: "M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+        search: "m21 21-4.3-4.3 M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0z",
+        bed: "M2 4v16 M2 8h20 M2 12h18a2 2 0 0 1 2 2v6 M2 18h20",
+        bath: "M9 6V2 M15 6V2 M3 10V6h18v4 M3 10a8 8 0 0 0 16 0 M21 15v5 M3 15v5",
+        car: "M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9 M14 8H5c-.6 0-1.1.4-1.4.9l-1.4 2.9 M7 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM17 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
+        maximize: "M15 3h6v6 M9 21H3v-6 M21 3l-7 7 M3 21l7-7",
+        message: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+        calendar: "M21 5H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z M16 3v4 M8 3v4 M3 11h18",
+        dollar: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+        calculator: "M16 2H8a4 4 0 0 0-4 4v12a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4V6a4 4 0 0 0-4-4z M8 6h8 M16 10H8 M16 14H8 M16 18H8",
+        shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+        check: "M20 6 9 17l-5-5",
+        close: "M18 6 6 18 M6 6l12 12",
+        user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+        video: "m22 8-6 4 6 4V8z M14 6H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z",
+        mail: "m22 4-10 8L2 4 M22 4v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4",
+        trash: "M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
+        edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z",
+        plus: "M12 5v14 M5 12h14",
+        share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13",
+        heart: "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78l1.06-1.06a5.5 5.5 0 0 0 0-7.78z",
+        chevronLeft: "m15 18-6-6 6-6",
+        chevronRight: "m9 18 6-6 M3 12h18",
+        arrowRight: "M5 12h14 M12 5l7 7-7 7",
+        reset: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5",
+        checkCircle: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14l-3-3",
+        download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
+        upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
+        star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"
+      };
+
+      const path = paths[name];
+      if (!path) return null;
+      const segments = path.split(" M");
+
+      return (
+        <svg
+          className={className}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          viewBox="0 0 24 24"
+        >
+          {segments.map((segment, i) => (
+            <path key={i} d={i === 0 ? segment : "M" + segment} />
+          ))}
+        </svg>
+      );
+    }
+
+    // --- MAIN EXPORT COMPONENT ---
+    function App() {
+      // Views & State
+      const [currentView, setCurrentView] = useState('home'); // 'home' | 'admin'
+      const [properties, setProperties] = useState(() => {
+        const saved = localStorage.getItem('suzuki_properties');
+        return saved ? JSON.parse(saved) : INITIAL_PROPERTIES;
+      });
+      const [bookings, setBookings] = useState(() => {
+        const saved = localStorage.getItem('suzuki_bookings');
+        return saved ? JSON.parse(saved) : [];
+      });
+      const [favorites, setFavorites] = useState(() => {
+        const saved = localStorage.getItem('suzuki_favorites');
+        return saved ? JSON.parse(saved) : [];
+      });
+
+      // Load properties and bookings from Supabase on start and keep them synchronized (polling)
+      useEffect(() => {
+        const fetchAllFromCloud = async () => {
+          const config = getSupabaseConfig();
+          if (config.enabled && config.url && config.key) {
+            try {
+              // Fetch properties
+              const cloudProps = await dbFetchProperties();
+              if (cloudProps) {
+                setProperties(cloudProps);
+              }
+              // Fetch bookings
+              const cloudBookings = await dbFetchBookings();
+              if (cloudBookings) {
+                setBookings(cloudBookings);
+              }
+            } catch (err) {
+              console.error('Falha ao sincronizar em segundo plano com o Supabase. Usando cópia local.', err);
+            }
+          }
+        };
+
+        // Initial fetch
+        fetchAllFromCloud();
+
+        // Setup interval for automatic real-time synchronization every 10 seconds
+        const intervalId = setInterval(() => {
+          fetchAllFromCloud();
+        }, 10000);
+
+        return () => clearInterval(intervalId);
+      }, []);
+
+      // Filter State
+      const [filters, setFilters] = useState({
+        search: '',
+        type: 'todos',
+        propertyType: 'todos',
+        minPrice: '',
+        maxPrice: '',
+        bedrooms: 'todos',
+        minArea: '',
+        city: 'todas'
+      });
+
+      const [selectedProperty, setSelectedProperty] = useState(null);
+
+      // Save States to LocalStorage
+      useEffect(() => {
+        localStorage.setItem('suzuki_properties', JSON.stringify(properties));
+      }, [properties]);
+
+      useEffect(() => {
+        localStorage.setItem('suzuki_bookings', JSON.stringify(bookings));
+      }, [bookings]);
+
+      useEffect(() => {
+        localStorage.setItem('suzuki_favorites', JSON.stringify(favorites));
+      }, [favorites]);
+
+      // Filter Actions
+      const handleResetFilters = () => {
+        setFilters({
+          search: '',
+          type: 'todos',
+          propertyType: 'todos',
+          minPrice: '',
+          maxPrice: '',
+          bedrooms: 'todos',
+          minArea: '',
+          city: 'todas'
+        });
+      };
+
+      const toggleFavorite = (id) => {
+        setFavorites(prev => 
+          prev.includes(id) ? prev.filter(fId => fId !== id) : [...prev, id]
+        );
+      };
+
+      // Filtered properties computation
+      const filteredProperties = useMemo(() => {
+        return properties.filter(p => {
+          if (filters.type !== 'todos' && p.type !== filters.type) return false;
+          if (filters.propertyType !== 'todos' && p.propertyType !== filters.propertyType) return false;
+          if (filters.city !== 'todas' && p.city !== filters.city) return false;
+          
+          if (filters.minPrice && p.price < Number(filters.minPrice)) return false;
+          if (filters.maxPrice && p.price > Number(filters.maxPrice)) return false;
+          if (filters.minArea && p.area < Number(filters.minArea)) return false;
+
+          if (filters.bedrooms !== 'todos') {
+            if (filters.bedrooms === '4+') {
+              if (p.bedrooms < 4) return false;
+            } else {
+              if (p.bedrooms !== Number(filters.bedrooms)) return false;
+            }
+          }
+
+          if (filters.search) {
+            const query = filters.search.toLowerCase();
+            const matchesTitle = p.title.toLowerCase().includes(query);
+            const matchesDesc = p.description.toLowerCase().includes(query);
+            const matchesCode = p.code.toLowerCase().includes(query);
+            const matchesNeigh = p.neighborhood.toLowerCase().includes(query);
+            if (!matchesTitle && !matchesDesc && !matchesCode && !matchesNeigh) return false;
+          }
+
+          return true;
+        });
+      }, [properties, filters]);
+
+      const handleAddBooking = async (newBooking) => {
+        setBookings(prev => [newBooking, ...prev]);
+        const config = getSupabaseConfig();
+        if (config.enabled) {
+          try {
+            await dbSaveBooking(newBooking);
+          } catch (err) {
+            console.error('Falha ao salvar agendamento no Supabase:', err);
+          }
+        }
+      };
+
+      return (
+        <div className="flex flex-col min-h-screen">
+          {/* Header/Navbar */}
+          <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md shadow-sm border-b border-stone-100">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center h-20">
+                <div onClick={() => { setCurrentView('home'); setSelectedProperty(null); }} className="flex items-center space-x-3 cursor-pointer group">
+                  <div className="bg-brand-gold p-2.5 rounded-lg text-white shadow-md shadow-brand-gold/25 group-hover:bg-brand-gold-dark transition-all">
+                    <Icon name="building" className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-1">
+                      <span className="text-xl font-extrabold tracking-wider text-stone-900">SUZUKI</span>
+                      <span className="text-xl font-light text-brand-gold">IMÓVEIS</span>
+                    </div>
+                    <span className="text-[10px] text-stone-400 uppercase tracking-widest font-mono block">Credibilidade & Tradição</span>
+                  </div>
+                </div>
+
+                <nav className="hidden md:flex items-center space-x-8">
+                  <button onClick={() => { setCurrentView('home'); setSelectedProperty(null); }} className={`text-sm font-semibold py-2 ${currentView === 'home' ? 'text-brand-gold border-b-2 border-brand-gold' : 'text-stone-600 hover:text-stone-950'}`}>
+                    Imóveis
+                  </button>
+                  <a href="#sobre" onClick={() => setCurrentView('home')} className="text-sm font-semibold text-stone-600 hover:text-stone-950">Sobre</a>
+                  <a href="#contato" onClick={() => setCurrentView('home')} className="text-sm font-semibold text-stone-600 hover:text-stone-950">Contato</a>
+                  <span className="h-4 w-px bg-stone-200"></span>
+                  <button 
+                    onClick={() => setCurrentView(currentView === 'admin' ? 'home' : 'admin')} 
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${currentView === 'admin' ? 'bg-brand-gold text-white' : 'bg-stone-50 text-stone-700 hover:bg-stone-100 border border-stone-200'}`}
+                  >
+                    <Icon name="key" className="h-4 w-4" />
+                    <span>{currentView === 'admin' ? 'Ver Site' : 'Painel Corretor'}</span>
+                  </button>
+                </nav>
+
+                <div className="md:hidden flex items-center">
+                  <button onClick={() => setCurrentView(currentView === 'admin' ? 'home' : 'admin')} className="p-2.5 bg-stone-50 border border-stone-200 rounded-lg text-stone-700">
+                    <Icon name="key" className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Container */}
+          <main className="flex-1 bg-stone-50">
+            {currentView === 'home' ? (
+              <div>
+                {/* Hero with Filters */}
+                <Hero filters={filters} setFilters={setFilters} onReset={handleResetFilters} />
+
+                {/* Properties Section */}
+                <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                  <div className="flex justify-between items-baseline mb-8">
+                    <div>
+                      <h2 className="text-2xl font-extrabold text-stone-900">Catálogo de Imóveis</h2>
+                      <p className="text-sm text-stone-500 mt-1">Exibindo {filteredProperties.length} de {properties.length} propriedades ativas</p>
+                    </div>
+                  </div>
+
+                  {filteredProperties.length === 0 ? (
+                    <div className="bg-white border border-stone-200 rounded-2xl p-12 text-center max-w-lg mx-auto shadow-sm">
+                      <Icon name="search" className="h-10 w-10 text-stone-300 mx-auto mb-4" />
+                      <h3 className="font-bold text-stone-800 text-lg">Nenhum imóvel encontrado</h3>
+                      <p className="text-stone-500 text-sm mt-1">Tente ajustar seus filtros de busca ou remover faixas de preços específicas.</p>
+                      <button onClick={handleResetFilters} className="mt-4 px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark text-white text-xs font-bold rounded-lg uppercase">
+                        Limpar Filtros
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredProperties.map(property => (
+                        <PropertyCard 
+                          key={property.id} 
+                          property={property} 
+                          onViewDetails={setSelectedProperty} 
+                          onToggleFav={toggleFavorite}
+                          isFav={favorites.includes(property.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* About Traditional Section */}
+                <section id="sobre" className="bg-stone-900 text-white py-16">
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                      <div className="space-y-6">
+                        <span className="text-xs font-mono uppercase tracking-widest text-brand-gold font-bold">Desde 1996</span>
+                        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Comprometimento com a sua satisfação</h2>
+                        <p className="text-stone-300 text-sm leading-relaxed">
+                          A Suzuki Imóveis une tradição e atendimento exclusivo para ajudar famílias a realizarem o sonho da residência de alto padrão. Atuamos com extrema segurança jurídica em intermediações comerciais e residenciais de alto luxo.
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-stone-800 text-center">
+                          <div>
+                            <p className="text-2xl font-black text-brand-gold">30 anos</p>
+                            <p className="text-xs text-stone-400 mt-1">De Mercado</p>
+                          </div>
+                          <div>
+                            <p className="text-2xl font-black text-brand-gold">1.500+</p>
+                            <p className="text-xs text-stone-400 mt-1">Imóveis Entregues</p>
+                          </div>
+                          <div>
+                            <p className="text-2xl font-black text-brand-gold">100%</p>
+                            <p className="text-xs text-stone-400 mt-1">Segurança Jurídica</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="relative h-72 sm:h-96 rounded-xl overflow-hidden shadow-2xl">
+                        <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80" alt="Suzuki Imóveis" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Contact Section */}
+                <section id="contato" className="py-16 bg-white border-t border-stone-100">
+                  <div className="max-w-4xl mx-auto px-4 text-center space-y-6">
+                    <div className="bg-gold-50 w-12 h-12 rounded-full flex items-center justify-center text-brand-gold mx-auto">
+                      <Icon name="phone" className="h-6 w-6" />
+                    </div>
+                    <h2 className="text-2xl font-black text-stone-900">Fale com um Especialista</h2>
+                    <p className="text-stone-600 text-sm max-w-md mx-auto">
+                      Tem alguma dúvida sobre compra, venda ou locação? Nossa equipe está pronta para atendê-lo com exclusividade.
+                    </p>
+                    <div className="flex flex-col sm:flex-row justify-center items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                      <a href="https://api.whatsapp.com/send?phone=5511970199648&text=Olá! Venho do site Suzuki Imóveis e gostaria de um atendimento personalizado." target="_blank" className="flex items-center justify-center space-x-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm tracking-wide shadow-md">
+                        <Icon name="message" className="h-5 w-5" />
+                        <span>Conversar no WhatsApp</span>
+                      </a>
+                      <a href="mailto:contato@suzukiimoveis.com" className="flex items-center justify-center space-x-2 px-6 py-3 bg-stone-900 hover:bg-stone-950 text-white rounded-lg font-bold text-sm tracking-wide">
+                        <Icon name="mail" className="h-4 w-4" />
+                        <span>E-mail contato@suzuki.com</span>
+                      </a>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <AdminPanel 
+                properties={properties} 
+                setProperties={setProperties} 
+                bookings={bookings} 
+                setBookings={setBookings}
+              />
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="bg-stone-950 text-stone-400 py-12 border-t border-stone-900">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-left">
+              <div className="flex flex-col sm:flex-row justify-between items-center border-b border-stone-900 pb-8 mb-8">
+                <div className="mb-4 sm:mb-0">
+                  <div className="flex items-center space-x-2 justify-center sm:justify-start text-white">
+                    <Icon name="building" className="h-5 w-5 text-brand-gold" />
+                    <span className="font-extrabold tracking-wider text-base">SUZUKI IMÓVEIS</span>
+                  </div>
+                  <p className="text-xs text-stone-500 mt-1 font-mono">CRECI J-97019 | Transparência e Honestidade desde 1996</p>
+                </div>
+                <div className="text-xs text-stone-500 text-center sm:text-right font-mono">
+                  SÃO PAULO | CURITIBA | FLORIANÓPOLIS
+                </div>
+              </div>
+              <p className="text-center text-[11px] text-stone-600">
+                &copy; 2026 Suzuki Imóveis Ltda. Todos os direitos reservados. Fotos ilustrativas.
+              </p>
+            </div>
+          </footer>
+
+          {/* Modal details */}
+          {selectedProperty && (
+            <PropertyModal 
+              property={selectedProperty} 
+              onClose={() => setSelectedProperty(null)} 
+              onAddBooking={handleAddBooking}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // --- HERO SECTION WITH FILTERS ---
+    function Hero({ filters, setFilters, onReset }) {
+      return (
+        <div className="relative bg-stone-100 py-16 px-4 overflow-hidden border-b border-stone-200">
+          <div className="absolute inset-0 opacity-15">
+            <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80" className="w-full h-full object-cover" />
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-stone-50/70 via-stone-50/95 to-stone-100"></div>
+
+          <div className="relative max-w-5xl mx-auto text-center space-y-6">
+            <div className="inline-flex items-center space-x-1.5 bg-gold-50 border border-gold-200 px-3.5 py-1 rounded-full text-xs font-semibold text-gold-800">
+              <Icon name="shield" className="h-3.5 w-3.5 text-brand-gold" />
+              <span className="uppercase tracking-wider font-mono text-[10px]">Intermediação de Luxo Credenciada</span>
+            </div>
+            
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-stone-900">
+              Seu próximo lar começa <span className="text-brand-gold">aqui</span>
+            </h1>
+            <p className="text-stone-600 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+              Casas residenciais de luxo, condomínios fechados, apartamentos exclusivos e opções para locação comercial.
+            </p>
+
+            {/* Filter Card */}
+            <div className="bg-white border border-stone-200 shadow-xl rounded-2xl p-6 text-left grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+              
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-stone-400 font-mono text-[10px] uppercase font-bold">Busca Geral</label>
+                <div className="relative">
+                  <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 h-4 w-4" />
+                  <input 
+                    type="text" 
+                    placeholder="Busque por código, bairro, título..." 
+                    value={filters.search}
+                    onChange={(e) => setFilters({...filters, search: e.target.value})}
+                    className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 focus:border-brand-gold rounded-lg text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-stone-400 font-mono text-[10px] uppercase font-bold">Tipo Imóvel</label>
+                <select 
+                  value={filters.propertyType}
+                  onChange={(e) => setFilters({...filters, propertyType: e.target.value})}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 focus:border-brand-gold rounded-lg text-xs outline-none"
+                >
+                  <option value="todos">Todos</option>
+                  <option value="casa">Casa</option>
+                  <option value="apartamento">Apartamento</option>
+                  <option value="comercial">Comercial</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-stone-400 font-mono text-[10px] uppercase font-bold">Cidade</label>
+                <select 
+                  value={filters.city}
+                  onChange={(e) => setFilters({...filters, city: e.target.value})}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 focus:border-brand-gold rounded-lg text-xs outline-none"
+                >
+                  <option value="todas">Todas</option>
+                  {CITIES_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Advanced collapse */}
+              <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-stone-100">
+                <div className="space-y-1.5">
+                  <span className="text-stone-400 font-mono text-[10px] uppercase font-bold">Quartos</span>
+                  <div className="flex space-x-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200">
+                    {['todos', '1', '2', '3', '4+'].map(num => (
+                      <button 
+                        key={num} 
+                        onClick={() => setFilters({...filters, bedrooms: num})}
+                        className={`flex-1 py-1 text-center text-[10px] font-bold rounded cursor-pointer ${filters.bedrooms === num ? 'bg-brand-gold text-white' : 'text-stone-500 hover:text-stone-900'}`}
+                      >
+                        {num === 'todos' ? 'Todos' : num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-stone-400 font-mono text-[10px] uppercase font-bold">Preço Máximo</span>
+                  <input 
+                    type="number" 
+                    placeholder="Ex: 2000000" 
+                    value={filters.maxPrice}
+                    onChange={(e) => setFilters({...filters, maxPrice: e.target.value})}
+                    className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs outline-none"
+                  />
+                </div>
+
+                <div className="flex items-end justify-between">
+                  <div className="flex space-x-1.5 bg-stone-100 rounded-lg p-0.5 border border-stone-200 w-full">
+                    {['todos', 'venda', 'aluguel'].map(t => (
+                      <button 
+                        key={t}
+                        onClick={() => setFilters({...filters, type: t})}
+                        className={`flex-1 py-1.5 text-center text-[10px] font-extrabold uppercase rounded cursor-pointer ${filters.type === t ? 'bg-stone-900 text-white' : 'text-stone-500 hover:text-stone-900'}`}
+                      >
+                        {t === 'todos' ? 'Todos' : t}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={onReset} className="ml-3 p-2 bg-stone-100 hover:bg-stone-200 rounded-lg text-stone-600 hover:text-stone-900" title="Limpar Filtros">
+                    <Icon name="reset" className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- PROPERTY CARD ---
+    function PropertyCard({ property, onViewDetails, onToggleFav, isFav }) {
+      const formatCurrency = (val) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
+      };
+
+      const handleWhatsApp = (e) => {
+        e.stopPropagation();
+        const text = `Olá, gostaria de saber mais sobre o imóvel Suzuki código *${property.code}* - ${property.title}`;
+        window.open(`https://api.whatsapp.com/send?phone=5511970199648&text=${encodeURIComponent(text)}`, '_blank');
+      };
+
+      return (
+        <div className="bg-white border border-stone-150 rounded-xl overflow-hidden hover:shadow-xl transition-all flex flex-col group h-full">
+          <div className="relative h-52 bg-stone-100 overflow-hidden">
+            <img src={property.images[0] || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=600&q=80'} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            <div className="absolute top-3 left-3 flex flex-col space-y-1">
+              <span className={`px-2 py-0.5 text-[9px] font-extrabold uppercase rounded text-white shadow-sm ${property.type === 'venda' ? 'bg-brand-gold' : 'bg-stone-900'}`}>
+                {property.type === 'venda' ? 'Venda' : 'Aluguel'}
+              </span>
+            </div>
+            <button onClick={() => onToggleFav(property.id)} className="absolute top-3 right-3 p-1.5 bg-white/90 rounded-full text-stone-600 hover:text-red-500 shadow-sm cursor-pointer">
+              <Icon name="heart" className={`h-3.5 w-3.5 ${isFav ? 'fill-red-500 text-red-500' : ''}`} />
+            </button>
+            <div className="absolute bottom-3 right-3">
+              <span className="px-2 py-0.5 bg-stone-900/80 text-white font-mono text-[9px] rounded font-semibold border border-stone-700">Cód: {property.code}</span>
+            </div>
+          </div>
+
+          <div className="p-5 flex-1 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center text-[10px] text-stone-400 font-semibold uppercase font-mono">
+                <Icon name="mapPin" className="h-3.5 w-3.5 text-stone-400 mr-1 flex-shrink-0" />
+                <span>{property.neighborhood}, {property.city}</span>
+              </div>
+              <h3 onClick={() => onViewDetails(property)} className="font-extrabold text-stone-900 text-sm hover:text-brand-gold cursor-pointer line-clamp-1 transition-colors">{property.title}</h3>
+              <p className="text-xs text-stone-500 line-clamp-2">{property.description}</p>
+            </div>
+
+            {/* Specs */}
+            <div className="grid grid-cols-4 gap-1.5 py-2.5 border-y border-stone-100 my-3 text-center text-stone-600 font-mono text-[10px]">
+              <div className="p-1 bg-stone-50 rounded" title="Dormitórios">
+                <Icon name="bed" className="h-3.5 w-3.5 mx-auto text-stone-400 mb-0.5" />
+                <span>{property.bedrooms} Q</span>
+              </div>
+              <div className="p-1 bg-stone-50 rounded" title="Banheiros">
+                <Icon name="bath" className="h-3.5 w-3.5 mx-auto text-stone-400 mb-0.5" />
+                <span>{property.bathrooms} B</span>
+              </div>
+              <div className="p-1 bg-stone-50 rounded" title="Vagas">
+                <Icon name="car" className="h-3.5 w-3.5 mx-auto text-stone-400 mb-0.5" />
+                <span>{property.garages} V</span>
+              </div>
+              <div className="p-1 bg-stone-50 rounded" title="Área">
+                <Icon name="maximize" className="h-3.5 w-3.5 mx-auto text-stone-400 mb-0.5" />
+                <span>{property.area} m²</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono text-stone-400 uppercase">Valor pedido</span>
+                <p className="text-base font-black text-stone-900">{formatCurrency(property.price)}{property.type === 'aluguel' && <span className="text-[10px] font-normal text-stone-500">/mês</span>}</p>
+              </div>
+              <div className="flex space-x-1">
+                <button onClick={handleWhatsApp} className="p-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg cursor-pointer" title="Perguntar no WhatsApp">
+                  <Icon name="message" className="h-4 w-4" />
+                </button>
+                <button onClick={() => onViewDetails(property)} className="px-3.5 py-2 bg-brand-gold hover:bg-brand-gold-dark text-white text-[10px] font-bold tracking-wider rounded-lg uppercase cursor-pointer">
+                  Visualizar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- PROPERTY DETAIL MODAL ---
+    function PropertyModal({ property, onClose, onAddBooking }) {
+      const [imgIdx, setImgIdx] = useState(0);
+      const [isSim, setIsSim] = useState(false);
+      const [visitType, setVisitType] = useState('presencial');
+      const [selDate, setSelDate] = useState('');
+      const [selTime, setSelTime] = useState('10:00');
+      
+      const [clName, setClName] = useState('');
+      const [clPhone, setClPhone] = useState('');
+      const [clEmail, setClEmail] = useState('');
+      const [booked, setBooked] = useState(false);
+
+      const [simData, setSimData] = useState({
+        down: Math.round(property.price * 0.2),
+        rate: 9.5,
+        years: 30
+      });
+
+      const next6Days = useMemo(() => {
+        const list = [];
+        const locale = 'pt-BR';
+        for(let i=1; i<=6; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() + i);
+          const wk = d.toLocaleDateString(locale, { weekday: 'short' }).replace('.', '');
+          const dayNum = d.toLocaleDateString(locale, { day: 'numeric' });
+          const raw = d.toISOString().slice(0, 10);
+          list.push({ wk: wk.toUpperCase(), dayNum, raw });
+        }
+        return list;
+      }, []);
+
+      useEffect(() => {
+        if(next6Days.length > 0) setSelDate(next6Days[0].raw);
+      }, [next6Days]);
+
+      const formatCurrency = (val) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
+      };
+
+      const handleSchedule = (e) => {
+        e.preventDefault();
+        if(!clName || !clPhone) return;
+
+        const dateObj = next6Days.find(d => d.raw === selDate);
+        const readableDate = dateObj ? `${dateObj.wk}, ${dateObj.dayNum}` : selDate;
+
+        const newB = {
+          id: `bk-${Date.now()}`,
+          propertyId: property.id,
+          propertyCode: property.code,
+          propertyTitle: property.title,
+          date: selDate,
+          timeSlot: selTime,
+          visitType,
+          clientName: clName,
+          clientPhone: clPhone,
+          clientEmail: clEmail,
+          status: 'pendente',
+          createdAt: new Date().toISOString()
+        };
+
+        onAddBooking(newB);
+        setBooked(true);
+
+        setTimeout(() => {
+          const typeLabel = visitType === 'presencial' ? 'Presencial' : 'Vídeo-Chamada';
+          const msg = `Olá! Agendei uma visita ${typeLabel} para o imóvel Suzuki código *${property.code}* para o dia *${readableDate}* às *${selTime}*. Nome: ${clName}`;
+          window.open(`https://api.whatsapp.com/send?phone=5511970199648&text=${encodeURIComponent(msg)}`, '_blank');
+        }, 1200);
+      };
+
+      const simulationResult = useMemo(() => {
+        const price = property.price;
+        const down = simData.down;
+        const fin = Math.max(0, price - down);
+        if(fin <= 0) return { fin: 0, first: 0, last: 0, total: 0 };
+
+        const monthlyRate = (simData.rate / 100) / 12;
+        const months = simData.years * 12;
+        const amortization = fin / months;
+        const first = amortization + (fin * monthlyRate);
+        const last = amortization + (amortization * monthlyRate);
+        const total = ((first + last) / 2) * months + down;
+
+        return { fin, first, last, total };
+      }, [simData, property]);
+
+      return (
+        <div className="fixed inset-0 z-50 bg-stone-900/65 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl relative text-stone-800">
+            
+            <div className="sticky top-0 bg-white/95 backdrop-blur-md z-30 px-6 py-4 border-b border-stone-150 flex items-center justify-between">
+              <div>
+                <span className="text-brand-gold text-[10px] font-mono font-bold uppercase tracking-wider">FICHA INDIVIDUAL DO IMÓVEL</span>
+                <h2 className="text-base font-extrabold text-stone-900 truncate max-w-md">{property.title}</h2>
+              </div>
+              <button onClick={onClose} className="p-2 bg-stone-50 hover:bg-stone-100 rounded-lg text-stone-500 hover:text-brand-gold">
+                <Icon name="close" className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Media Gallery & Specs */}
+              <div className="md:col-span-2 space-y-6">
+                <div className="relative h-64 sm:h-80 rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
+                  <img src={property.images[imgIdx]} alt={property.title} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-4 left-4 right-4 flex space-x-1.5 p-1 bg-black/35 backdrop-blur-sm rounded-lg overflow-x-auto scrollbar-none">
+                    {property.images.map((img, i) => (
+                      <button key={i} onClick={() => setImgIdx(i)} className={`h-8 w-12 rounded border flex-shrink-0 cursor-pointer ${i === imgIdx ? 'border-brand-gold scale-105' : 'border-transparent opacity-60'}`}>
+                        <img src={img} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 text-center p-3.5 bg-stone-50 rounded-xl border border-stone-200/50">
+                  <div className="p-1">
+                    <Icon name="bed" className="h-5 w-5 mx-auto text-brand-gold mb-1" />
+                    <span className="text-[10px] text-stone-400 font-mono block">DORMITÓRIOS</span>
+                    <span className="text-xs font-bold text-stone-900 font-mono mt-0.5">{property.bedrooms} Quarto{property.bedrooms !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="p-1">
+                    <Icon name="bath" className="h-5 w-5 mx-auto text-brand-gold mb-1" />
+                    <span className="text-[10px] text-stone-400 font-mono block">BANHEIROS</span>
+                    <span className="text-xs font-bold text-stone-900 font-mono mt-0.5">{property.bathrooms} Banheiro{property.bathrooms !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="p-1">
+                    <Icon name="car" className="h-5 w-5 mx-auto text-brand-gold mb-1" />
+                    <span className="text-[10px] text-stone-400 font-mono block">VAGAS</span>
+                    <span className="text-xs font-bold text-stone-900 font-mono mt-0.5">{property.garages} Vaga{property.garages !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="p-1">
+                    <Icon name="maximize" className="h-5 w-5 mx-auto text-brand-gold mb-1" />
+                    <span className="text-[10px] text-stone-400 font-mono block">ÁREA ÚTIL</span>
+                    <span className="text-xs font-bold text-stone-900 font-mono mt-0.5">{property.area} m²</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="font-bold text-stone-900 font-sans border-b pb-1.5 border-stone-100">Descrição do Imóvel</h3>
+                  <p className="text-stone-600 text-sm leading-relaxed">{property.description}</p>
+                </div>
+
+                <div className="p-4 bg-stone-50 border rounded-xl space-y-1.5 font-mono text-xs">
+                  <span className="font-bold uppercase text-stone-700 block">Endereço de Referência</span>
+                  <p className="text-stone-900 font-sans font-semibold">{property.address}</p>
+                  <p className="text-stone-500 font-sans">{property.neighborhood} - {property.city} / {property.state}</p>
+                </div>
+
+                {/* Mortgage Simulator */}
+                {property.type === 'venda' && (
+                  <div className="p-5 bg-stone-50 border border-stone-200 rounded-xl space-y-4">
+                    <button onClick={() => setIsSim(!isSim)} className="flex items-center justify-between w-full font-bold text-stone-900">
+                      <div className="flex items-center space-x-2">
+                        <Icon name="calculator" className="h-5 w-5 text-brand-gold" />
+                        <span>Simular Financiamento Bancário</span>
+                      </div>
+                      <span className="text-brand-gold text-xs underline">{isSim ? 'Recolher' : 'Simular Agora'}</span>
+                    </button>
+
+                    {isSim && (
+                      <div className="space-y-4 pt-3 border-t border-stone-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[10px] font-mono text-stone-400 block mb-1">VALOR DE ENTRADA (R$)</label>
+                            <input type="number" value={simData.down} onChange={(e) => setSimData({...simData, down: Number(e.target.value)})} className="w-full px-2 py-1.5 bg-white border border-stone-200 rounded text-xs" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono text-stone-400 block mb-1">JUROS ESTIMADOS (% A.A.)</label>
+                            <input type="number" step="0.1" value={simData.rate} onChange={(e) => setSimData({...simData, rate: Number(e.target.value)})} className="w-full px-2 py-1.5 bg-white border border-stone-200 rounded text-xs" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-mono text-stone-400 block mb-1">PRAZO DE FINANCIAMENTO</label>
+                            <select value={simData.years} onChange={(e) => setSimData({...simData, years: Number(e.target.value)})} className="w-full px-2 py-1.5 bg-white border border-stone-200 rounded text-xs">
+                              <option value={15}>15 Anos (180 m)</option>
+                              <option value={20}>20 Anos (240 m)</option>
+                              <option value={30}>30 Anos (360 m)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-2 bg-white border rounded-lg p-3">
+                          <div>
+                            <span className="text-[9px] text-stone-400 block font-mono">FINANCIADO</span>
+                            <span className="text-xs font-bold font-mono">{formatCurrency(simulationResult.fin)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-stone-400 block font-mono">1ª PARCELA</span>
+                            <span className="text-xs font-bold font-mono text-stone-900">{formatCurrency(simulationResult.first)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-stone-400 block font-mono">ÚLTIMA PARCELA</span>
+                            <span className="text-xs font-bold font-mono text-brand-gold">{formatCurrency(simulationResult.last)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-stone-400 block font-mono">CUSTO TOTAL</span>
+                            <span className="text-xs font-bold font-mono">{formatCurrency(simulationResult.total)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Booking Scheduler sidebar */}
+              <div className="space-y-6">
+                <div className="p-5 bg-stone-900 text-white rounded-xl space-y-3">
+                  <span className="text-[9px] font-mono text-brand-gold uppercase block">Valor pedido</span>
+                  <p className="text-2xl font-black">{formatCurrency(property.price)}{property.type === 'aluguel' && <span className="text-xs font-normal text-stone-400">/mês</span>}</p>
+                  <div className="grid grid-cols-2 gap-3 text-[10px] font-mono border-t border-stone-800 pt-3 text-stone-400">
+                    <div>
+                      <span>Condomínio</span>
+                      <p className="text-white font-bold">{property.condo ? formatCurrency(property.condo) : 'R$ 0,00'}</p>
+                    </div>
+                    <div>
+                      <span>IPTU Anual</span>
+                      <p className="text-white font-bold">{property.iptu ? formatCurrency(property.iptu) : 'R$ 0,00'}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=5511970199648&text=Olá! Venho do site Suzuki Imóveis e gostaria de informações sobre o imóvel ${property.code}`)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-xs font-bold text-center text-white uppercase mt-2 cursor-pointer">
+                    Falar com Corretor
+                  </button>
+                </div>
+
+                {/* Visita scheduler */}
+                <div className="p-5 bg-white border border-stone-200 rounded-xl space-y-4 shadow-sm">
+                  <div className="border-b pb-2.5">
+                    <span className="px-2 py-0.5 bg-gold-50 text-gold-800 text-[9px] font-bold font-mono uppercase rounded">VISITA EXPRESS</span>
+                    <h3 className="text-sm font-bold mt-1 text-stone-900">Agende Visita Gratuita</h3>
+                    <p className="text-[10px] text-stone-400 mt-0.5">Sem custos ou compromissos comerciais</p>
+                  </div>
+
+                  {booked ? (
+                    <div className="text-center py-4 space-y-2">
+                      <div className="p-2 bg-emerald-50 text-emerald-600 rounded-full inline-block">
+                        <Icon name="checkCircle" className="h-8 w-8" />
+                      </div>
+                      <h4 className="font-bold text-sm text-stone-900">Solicitação Enviada!</h4>
+                      <p className="text-[11px] text-stone-500">Agendamento de visita registrado com sucesso. Redirecionando WhatsApp de confirmação em instantes...</p>
+                      <button onClick={() => setBooked(false)} className="text-[10px] font-bold text-brand-gold underline mt-2 cursor-pointer">Alterar horário</button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSchedule} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button type="button" onClick={() => setVisitType('presencial')} className={`py-1.5 border text-[10px] font-bold rounded ${visitType === 'presencial' ? 'bg-brand-gold border-brand-gold text-white' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>Presencial</button>
+                        <button type="button" onClick={() => setVisitType('virtual')} className={`py-1.5 border text-[10px] font-bold rounded ${visitType === 'virtual' ? 'bg-brand-gold border-brand-gold text-white' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>Vídeo</button>
+                      </div>
+
+                      {/* Horizontal Calendar */}
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-mono text-stone-400 block font-bold uppercase">SELECIONE O DIA</span>
+                        <div className="flex space-x-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+                          {next6Days.map(d => (
+                            <button key={d.raw} type="button" onClick={() => setSelDate(d.raw)} className={`flex flex-col items-center justify-center p-1.5 border rounded min-w-[54px] flex-shrink-0 font-mono text-center cursor-pointer ${selDate === d.raw ? 'bg-stone-950 border-stone-950 text-white' : 'bg-stone-50 text-stone-500 hover:border-stone-300'}`}>
+                              <span className="text-[8px] uppercase">{d.wk}</span>
+                              <span className="text-xs font-extrabold">{d.dayNum}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1">
+                        {["09:00", "11:00", "14:00", "16:00"].map(t => (
+                          <button key={t} type="button" onClick={() => setSelTime(t)} className={`py-1 border text-[10px] font-bold font-mono rounded cursor-pointer ${selTime === t ? 'bg-brand-gold border-brand-gold text-white' : 'bg-stone-50 border-stone-150 text-stone-500'}`}>{t}</button>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2 border-t pt-2">
+                        <input type="text" required placeholder="Seu Nome completo" value={clName} onChange={(e) => setClName(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded text-xs" />
+                        <input type="tel" required placeholder="WhatsApp (DDD)" value={clPhone} onChange={(e) => setClPhone(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded text-xs" />
+                      </div>
+
+                      <button type="submit" className="w-full py-2.5 bg-brand-gold hover:bg-brand-gold-dark text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md shadow-brand-gold/15 cursor-pointer">
+                        Solicitar Horário
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    // --- CORRETOR / ADMIN PANEL ---
+    function AdminPanel({ properties, setProperties, bookings, setBookings }) {
+      const [pass, setPass] = useState('');
+      const [authed, setAuthed] = useState(false);
+      const [tab, setTab] = useState('list'); // 'list' | 'add' | 'bookings' | 'database'
+      const [editingProp, setEditingProp] = useState(null);
+
+      // Supabase Database Settings States
+      const [dbUrl, setDbUrl] = useState('');
+      const [dbKey, setDbKey] = useState('');
+      const [dbEnabled, setDbEnabled] = useState(false);
+      const [testStatus, setTestStatus] = useState('idle'); // 'idle' | 'testing' | 'success' | 'error'
+      const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'success' | 'error'
+      const [syncResult, setSyncResult] = useState(null);
+      const [copiedSql, setCopiedSql] = useState(false);
+
+      // Load database configuration
+      useEffect(() => {
+        const config = getSupabaseConfig();
+        setDbUrl(config.url);
+        setDbKey(config.key);
+        setDbEnabled(config.enabled);
+      }, []);
+
+      // Form states
+      const [code, setCode] = useState('');
+      const [title, setTitle] = useState('');
+      const [desc, setDesc] = useState('');
+      const [type, setType] = useState('venda');
+      const [pType, setPType] = useState('casa');
+      const [price, setPrice] = useState('');
+      const [condo, setCondo] = useState('');
+      const [iptu, setIptu] = useState('');
+      const [bedrooms, setBedrooms] = useState('2');
+      const [bathrooms, setBathrooms] = useState('2');
+      const [suites, setSuites] = useState('1');
+      const [garages, setGarages] = useState('1');
+      const [area, setArea] = useState('');
+      const [city, setCity] = useState('São Paulo');
+      const [neigh, setNeigh] = useState('');
+      const [address, setAddress] = useState('');
+      const [img1, setImg1] = useState('');
+      const [img2, setImg2] = useState('');
+      const [badge, setBadge] = useState('Pronto');
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (pass === 'admin123' || pass === 'suzuki2026' || pass === '123') {
+          setAuthed(true);
+        } else {
+          alert('Senha inválida de corretor!');
+        }
+      };
+
+      const handleSaveDbConfig = (e) => {
+        e.preventDefault();
+        saveSupabaseConfig(dbUrl, dbKey, dbEnabled);
+        alert('Configurações do banco de dados salvas!');
+        if (dbEnabled) {
+          alert('Conexão configurada e ativada! Recarregue a página para atualizar a vitrine de imóveis com o banco Supabase.');
+        }
+      };
+
+      const handleTestConnection = async () => {
+        if (!dbUrl || !dbKey) {
+          alert('Por favor, preencha a URL e a Chave Anon antes de testar!');
+          return;
+        }
+        setTestStatus('testing');
+        const isOk = await testSupabaseConnection(dbUrl, dbKey);
+        if (isOk) {
+          setTestStatus('success');
+          setTimeout(() => setTestStatus('idle'), 4000);
+        } else {
+          setTestStatus('error');
+          setTimeout(() => setTestStatus('idle'), 4000);
+        }
+      };
+
+      const handleSyncDataToCloud = async () => {
+        const config = getSupabaseConfig();
+        if (!config.enabled || !config.url || !config.key) {
+          alert('Ative e salve a configuração do Supabase antes de sincronizar os dados!');
+          return;
+        }
+        if (confirm('Deseja enviar todo o seu portfólio de imóveis e registros de agendamento do navegador atual para o seu Supabase na nuvem? Isso irá criar/mesclar com os dados lá.')) {
+          setSyncStatus('syncing');
+          try {
+            const result = await dbSyncLocalToCloud(properties, bookings);
+            setSyncResult(result);
+            setSyncStatus('success');
+            alert('Dados sincronizados com sucesso para o Supabase Cloud!');
+          } catch (err) {
+            console.error(err);
+            setSyncStatus('error');
+            alert('Erro ao sincronizar: ' + (err.message || err) + '. Certifique-se de que executou o script SQL de tabelas no seu banco Supabase!');
+          }
+        }
+      };
+
+      const handleCopySql = () => {
+        navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
+        setCopiedSql(true);
+        setTimeout(() => setCopiedSql(false), 2500);
+      };
+
+      const startEdit = (p) => {
+        setEditingProp(p);
+        setCode(p.code);
+        setTitle(p.title);
+        setDesc(p.description);
+        setType(p.type);
+        setPType(p.propertyType);
+        setPrice(p.price);
+        setCondo(p.condo || '');
+        setIptu(p.iptu || '');
+        setBedrooms(String(p.bedrooms));
+        setBathrooms(String(p.bathrooms));
+        setSuites(String(p.suites));
+        setGarages(String(p.garages));
+        setArea(p.area);
+        setCity(p.city);
+        setNeigh(p.neighborhood);
+        setAddress(p.address);
+        setImg1(p.images[0] || '');
+        setImg2(p.images[1] || '');
+        setBadge(p.badge || 'Pronto');
+        setTab('add');
+      };
+
+      const handleSave = (e) => {
+        e.preventDefault();
+        if(!code || !title || !price || !area) {
+          alert('Preencha os campos obrigatórios!');
+          return;
+        }
+
+        const imagesArr = [];
+        if (img1) imagesArr.push(img1);
+        if (img2) imagesArr.push(img2);
+        if (imagesArr.length === 0) {
+          imagesArr.push('https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80');
+        }
+
+        const propObj = {
+          id: editingProp ? editingProp.id : `sz-${Date.now()}`,
+          code,
+          title,
+          description: desc,
+          type,
+          propertyType: pType,
+          price: Number(price),
+          condo: condo ? Number(condo) : 0,
+          iptu: iptu ? Number(iptu) : 0,
+          bedrooms: Number(bedrooms),
+          bathrooms: Number(bathrooms),
+          suites: Number(suites),
+          garages: Number(garages),
+          area: Number(area),
+          city,
+          neighborhood: neigh || 'Bairro central',
+          state: city === 'Curitiba' ? 'PR' : 'SP',
+          address: address || 'Endereço Comercial',
+          images: imagesArr,
+          featured: editingProp ? editingProp.featured : false,
+          badge,
+          createdAt: editingProp ? editingProp.createdAt : new Date().toISOString()
+        };
+
+        if (editingProp) {
+          setProperties(prev => prev.map(item => item.id === editingProp.id ? propObj : item));
+          const config = getSupabaseConfig();
+          if (config.enabled) {
+            dbSaveProperty(propObj).catch(err => console.error("Falha ao salvar propriedade no Supabase:", err));
+          }
+          setEditingProp(null);
+          alert('Imóvel atualizado com sucesso!');
+        } else {
+          setProperties(prev => [propObj, ...prev]);
+          const config = getSupabaseConfig();
+          if (config.enabled) {
+            dbSaveProperty(propObj).catch(err => console.error("Falha ao salvar propriedade no Supabase:", err));
+          }
+          alert('Novo imóvel inserido no catálogo!');
+        }
+
+        // Reset
+        setCode('');
+        setTitle('');
+        setDesc('');
+        setPrice('');
+        setCondo('');
+        setIptu('');
+        setArea('');
+        setNeigh('');
+        setAddress('');
+        setImg1('');
+        setImg2('');
+        setTab('list');
+      };
+
+      const deleteProp = (id) => {
+        if(confirm('Tem certeza de que deseja deletar este imóvel?')) {
+          setProperties(prev => prev.filter(p => p.id !== id));
+          const config = getSupabaseConfig();
+          if (config.enabled) {
+            dbDeleteProperty(id).catch(err => console.error("Falha ao deletar propriedade no Supabase:", err));
+          }
+        }
+      };
+
+      // Backup systems
+      const exportBackup = () => {
+        const full = { properties, bookings };
+        const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup_suzuki_imoveis_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+      };
+
+      const importBackup = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            if(data.properties) setProperties(data.properties);
+            if(data.bookings) setBookings(data.bookings);
+            alert('Backup importado com absoluto sucesso!');
+          } catch(err) {
+            alert('Falha ao processar arquivo de backup.');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      if (!authed) {
+        return (
+          <div className="max-w-md mx-auto py-24 px-4">
+            <div className="bg-white border border-stone-200 rounded-2xl shadow-xl p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="p-3 bg-stone-900 text-brand-gold rounded-full inline-block">
+                  <Icon name="shield" className="h-6 w-6" />
+                </div>
+                <h2 className="text-xl font-bold text-stone-900">Acesso Restrito - Corretores</h2>
+                <p className="text-xs text-stone-500">Digite a chave de credencial de corretor cadastrada.</p>
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1.5 uppercase font-bold">Chave de Segurança</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="Ex: admin123 ou suzuki2026" 
+                    value={pass}
+                    onChange={(e) => setPass(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg outline-none text-xs focus:border-brand-gold text-center font-mono"
+                  />
+                </div>
+                <button type="submit" className="w-full py-2.5 bg-stone-900 hover:bg-stone-950 text-white rounded-lg font-bold text-xs uppercase tracking-wider cursor-pointer">
+                  Autenticar Acesso
+                </button>
+              </form>
+
+              <div className="text-center pt-2">
+                <span className="text-[10px] text-stone-400 block">* Dica de teste: Use <strong>admin123</strong> ou <strong>suzuki2026</strong></span>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const handleDeleteBooking = (id) => {
+        if(confirm('Tem certeza de que deseja deletar este agendamento de visita?')) {
+          setBookings(prev => prev.filter(item => item.id !== id));
+          const config = getSupabaseConfig();
+          if (config.enabled) {
+            dbDeleteBooking(id).catch(err => console.error("Falha ao deletar agendamento no Supabase:", err));
+          }
+        }
+      };
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+          
+          {/* Admin Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-stone-200 pb-5 space-y-3 sm:space-y-0">
+            <div>
+              <h2 className="text-2xl font-black text-stone-900">Espaço Digital do Corretor</h2>
+              <p className="text-xs text-stone-500 mt-1">Gerenciamento imediato de imóveis, visitas de clientes e integridade de dados.</p>
+            </div>
+            
+            {/* Action backups buttons */}
+            <div className="flex space-x-2">
+              <button onClick={exportBackup} className="flex items-center space-x-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 border text-stone-600 rounded-lg text-xs font-semibold cursor-pointer">
+                <Icon name="download" className="h-3.5 w-3.5" />
+                <span>Exportar Dados</span>
+              </button>
+              <label className="flex items-center space-x-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 border text-stone-600 rounded-lg text-xs font-semibold cursor-pointer">
+                <Icon name="upload" className="h-3.5 w-3.5" />
+                <span>Importar Dados</span>
+                <input type="file" accept=".json" onChange={importBackup} className="hidden" />
+              </label>
+            </div>
+          </div>
+
+          {/* Admin Tabs Nav */}
+          <div className="flex space-x-4 border-b border-stone-200 pb-0.5">
+            <button onClick={() => setTab('list')} className={`pb-2.5 text-xs font-bold uppercase border-b-2 transition-all cursor-pointer ${tab === 'list' ? 'border-brand-gold text-brand-gold-dark' : 'border-transparent text-stone-500 hover:text-stone-900'}`}>Lista de Imóveis</button>
+            <button onClick={() => { setEditingProp(null); setTab('add'); }} className={`pb-2.5 text-xs font-bold uppercase border-b-2 transition-all cursor-pointer ${tab === 'add' ? 'border-brand-gold text-brand-gold-dark' : 'border-transparent text-stone-500 hover:text-stone-900'}`}>{editingProp ? 'Editando Imóvel' : 'Cadastrar Novo'}</button>
+            <button onClick={() => setTab('bookings')} className={`pb-2.5 text-xs font-bold uppercase border-b-2 transition-all cursor-pointer ${tab === 'bookings' ? 'border-brand-gold text-brand-gold-dark' : 'border-transparent text-stone-500 hover:text-stone-900'}`}>Solicitações de Visita ({bookings.length})</button>
+            <button onClick={() => setTab('database')} className={`pb-2.5 text-xs font-bold uppercase border-b-2 transition-all cursor-pointer ${tab === 'database' ? 'border-brand-gold text-brand-gold-dark' : 'border-transparent text-stone-500 hover:text-stone-900'}`}>Banco Supabase</button>
+          </div>
+
+          {tab === 'list' && (
+            <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-sans">
+                  <thead className="bg-stone-50 border-b text-stone-500 uppercase font-mono text-[9px] font-bold">
+                    <tr>
+                      <th className="px-6 py-3.5">Código</th>
+                      <th className="px-6 py-3.5">Título</th>
+                      <th className="px-6 py-3.5">Cidade</th>
+                      <th className="px-6 py-3.5">Preço</th>
+                      <th className="px-6 py-3.5">Modalidade</th>
+                      <th className="px-6 py-3.5 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {properties.map(p => (
+                      <tr key={p.id} className="hover:bg-stone-50/75">
+                        <td className="px-6 py-4 font-mono font-bold text-stone-900">{p.code}</td>
+                        <td className="px-6 py-4 font-semibold text-stone-800 truncate max-w-xs">{p.title}</td>
+                        <td className="px-6 py-4">{p.city} - {p.neighborhood}</td>
+                        <td className="px-6 py-4 font-mono font-semibold">R$ {p.price.toLocaleString('pt-BR')}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase text-white ${p.type === 'venda' ? 'bg-brand-gold' : 'bg-stone-800'}`}>
+                            {p.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right flex justify-end space-x-1.5">
+                          <button onClick={() => startEdit(p)} className="p-1.5 bg-stone-100 hover:bg-stone-200 rounded text-stone-600 cursor-pointer" title="Editar Ficha">
+                            <Icon name="edit" className="h-4.5 w-4.5" />
+                          </button>
+                          <button onClick={() => deleteProp(p.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-600 cursor-pointer" title="Remover">
+                            <Icon name="trash" className="h-4.5 w-4.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === 'add' && (
+            <form onSubmit={handleSave} className="bg-white border rounded-xl shadow-md p-6 sm:p-8 space-y-6">
+              <h3 className="text-base font-extrabold text-stone-900 font-sans border-b pb-3 border-stone-100">
+                {editingProp ? `Editando Propriedade [Código: ${editingProp.code}]` : 'Formulário de Cadastro de Imóvel'}
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Código Interno *</label>
+                  <input type="text" required placeholder="Ex: SZ105" value={code} onChange={(e) => setCode(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Título do Anúncio *</label>
+                  <input type="text" required placeholder="Ex: Casa Duplex de Luxo com SPA" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs col-span-2" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Preço de Venda ou Locação *</label>
+                  <input type="number" required placeholder="Ex: 1450000" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs font-mono" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Negociação</label>
+                  <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs">
+                    <option value="venda">Venda</option>
+                    <option value="aluguel">Aluguel</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Tipo Físico</label>
+                  <select value={pType} onChange={(e) => setPType(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs">
+                    <option value="casa">Casa</option>
+                    <option value="apartamento">Apartamento</option>
+                    <option value="comercial">Comercial</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Área Útil (m²) *</label>
+                  <input type="number" required placeholder="Ex: 180" value={area} onChange={(e) => setArea(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs font-mono" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Selo Comercial</label>
+                  <select value={badge} onChange={(e) => setBadge(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs">
+                    <option value="Pronto">Pronto</option>
+                    <option value="Em Construção">Em Construção</option>
+                    <option value="Lançamento">Lançamento</option>
+                    <option value="Nenhum">Nenhum</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Cidade</label>
+                  <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs">
+                    {CITIES_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Bairro</label>
+                  <input type="text" placeholder="Ex: Pinheiros" value={neigh} onChange={(e) => setNeigh(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Endereço de Referência</label>
+                  <input type="text" placeholder="Ex: Rua Pamplona, 1200" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+                </div>
+              </div>
+
+              {/* Physical details rooms */}
+              <div className="grid grid-cols-4 gap-4 p-4 bg-stone-50 rounded-xl">
+                <div>
+                  <span className="text-[9px] font-mono text-stone-400 block font-bold">QUARTOS</span>
+                  <select value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} className="w-full px-2 py-1 bg-white border rounded text-xs">
+                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono text-stone-400 block font-bold">BANHEIROS</span>
+                  <select value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} className="w-full px-2 py-1 bg-white border rounded text-xs">
+                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono text-stone-400 block font-bold">SUÍTES</span>
+                  <select value={suites} onChange={(e) => setSuites(e.target.value)} className="w-full px-2 py-1 bg-white border rounded text-xs">
+                    {[0,1,2,3,4].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[9px] font-mono text-stone-400 block font-bold">VAGAS GARAGEM</span>
+                  <select value={garages} onChange={(e) => setGarages(e.target.value)} className="w-full px-2 py-1 bg-white border rounded text-xs">
+                    {[0,1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono text-stone-400 block uppercase font-bold">Descrição Completa</label>
+                <textarea rows="3" placeholder="Insira detalhes adicionais do imóvel aqui..." value={desc} onChange={(e) => setDesc(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+              </div>
+
+              {/* Images selection helpers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono text-stone-400 block uppercase font-bold">URL da Imagem Principal (Capa)</span>
+                  <input type="text" placeholder="Ex: https://images.unsplash.com/photo-..." value={img1} onChange={(e) => setImg1(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+                  <div className="flex flex-wrap gap-1.5 pt-1.5">
+                    {PRESET_IMAGE_OPTIONS.map((opt, idx) => (
+                      <button key={idx} type="button" onClick={() => setImg1(opt.url)} className="px-2 py-1 bg-stone-100 hover:bg-stone-200 rounded text-[9px] text-stone-600">{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-mono text-stone-400 block uppercase font-bold">URL da Imagem Secundária</span>
+                  <input type="text" placeholder="Ex: https://images.unsplash.com/photo-..." value={img2} onChange={(e) => setImg2(e.target.value)} className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs" />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t border-stone-100">
+                <button type="submit" className="px-6 py-2.5 bg-brand-gold hover:bg-brand-gold-dark text-white text-xs font-bold uppercase rounded-lg">
+                  {editingProp ? 'Salvar Edição' : 'Cadastrar Imóvel'}
+                </button>
+                <button type="button" onClick={() => { setEditingProp(null); setTab('list'); }} className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold uppercase rounded-lg">Cancelar</button>
+              </div>
+            </form>
+          )}
+
+          {tab === 'bookings' && (
+            <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+              <div className="p-4 bg-stone-50 border-b">
+                <span className="text-[10px] font-mono text-stone-400 uppercase font-bold">Histórico de Reservas Realizadas</span>
+              </div>
+              {bookings.length === 0 ? (
+                <div className="p-12 text-center text-stone-500 text-xs">
+                  Nenhuma solicitação de visita agendada até o momento.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-sans">
+                    <thead className="bg-stone-50 border-b text-stone-500 uppercase font-mono text-[9px] font-bold">
+                      <tr>
+                        <th className="px-6 py-3">Cód. Imóvel</th>
+                        <th className="px-6 py-3">Cliente</th>
+                        <th className="px-6 py-3">Data & Hora</th>
+                        <th className="px-6 py-3">Modalidade</th>
+                        <th className="px-6 py-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {bookings.map(b => (
+                        <tr key={b.id} className="hover:bg-stone-50/75">
+                          <td className="px-6 py-4 font-mono font-bold">{b.propertyCode}</td>
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-stone-900 block">{b.clientName}</span>
+                            <span className="text-[10px] text-stone-400 block">{b.clientPhone}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-semibold block">{b.date}</span>
+                            <span className="text-[10px] font-mono text-stone-400">{b.timeSlot}</span>
+                          </td>
+                          <td className="px-6 py-4 capitalize font-mono text-[10px]">
+                            {b.visitType}
+                          </td>
+                          <td className="px-6 py-4 text-right flex justify-end space-x-1">
+                            <button onClick={() => window.open(`https://api.whatsapp.com/send?phone=${b.clientPhone.replace(/\D/g, '')}&text=Olá! Sou corretor da Suzuki Imóveis e gostaria de confirmar seu agendamento de visita...`)} className="p-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded text-[10px] font-semibold flex items-center space-x-1 cursor-pointer">
+                              <Icon name="message" className="h-3.5 w-3.5" />
+                              <span>WhatsApp</span>
+                            </button>
+                            <button onClick={() => handleDeleteBooking(b.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded select-none cursor-pointer">
+                              <Icon name="trash" className="h-4.5 w-4.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'database' && (
+            <div className="space-y-6">
+              <div className="bg-white border rounded-xl shadow-md p-6 sm:p-8 space-y-6">
+                <div>
+                  <h3 className="text-base font-extrabold text-stone-900 border-b pb-3 border-stone-100 flex items-center space-x-2">
+                    <Icon name="database" className="h-5 w-5 text-brand-gold" />
+                    <span>Conexão Supabase Cloud</span>
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-1">Conecte o seu catálogo e visitas a um banco de dados relacional robusto hospedado na nuvem.</p>
+                </div>
+
+                <form onSubmit={handleSaveDbConfig} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Supabase URL</label>
+                      <input 
+                        type="url" 
+                        required 
+                        placeholder="https://your-project.supabase.co" 
+                        value={dbUrl} 
+                        onChange={(e) => setDbUrl(e.target.value)} 
+                        className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs font-mono" 
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono text-stone-400 block mb-1 uppercase font-bold">Supabase Anon Key</label>
+                      <input 
+                        type="password" 
+                        required 
+                        placeholder="eyJhbGciOi..." 
+                        value={dbKey} 
+                        onChange={(e) => setDbKey(e.target.value)} 
+                        className="w-full px-2.5 py-1.5 bg-stone-50 border rounded text-xs font-mono" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 p-3 bg-stone-50 rounded-lg">
+                    <input 
+                      type="checkbox" 
+                      id="dbEnabledCheckbox" 
+                      checked={dbEnabled} 
+                      onChange={(e) => setDbEnabled(e.target.checked)} 
+                      className="h-4 w-4 text-brand-gold border-stone-300 rounded focus:ring-brand-gold cursor-pointer" 
+                    />
+                    <label htmlFor="dbEnabledCheckbox" className="text-xs font-bold text-stone-800 cursor-pointer select-none">
+                      Ativar Sincronização em Tempo Real (Supabase)
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    <button type="submit" className="px-5 py-2 bg-stone-900 hover:bg-stone-950 text-white text-xs font-bold rounded-lg uppercase tracking-wider cursor-pointer">
+                      Salvar Configurações
+                    </button>
+                    
+                    <button 
+                      type="button" 
+                      onClick={handleTestConnection} 
+                      disabled={testStatus === 'testing'}
+                      className={`px-4 py-2 border text-xs font-semibold rounded-lg flex items-center space-x-2 cursor-pointer ${
+                        testStatus === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                        testStatus === 'error' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white hover:bg-stone-50 text-stone-700'
+                      }`}
+                    >
+                      {testStatus === 'testing' ? (
+                        <span>Testando...</span>
+                      ) : testStatus === 'success' ? (
+                        <span>Conectado com sucesso!</span>
+                      ) : testStatus === 'error' ? (
+                        <span>Erro na conexão!</span>
+                      ) : (
+                        <span>Testar Conexão</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="bg-white border rounded-xl shadow-md p-6 sm:p-8 space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-stone-900 uppercase font-mono tracking-wider">Migração de Dados Locais</h4>
+                  <p className="text-xs text-stone-500 mt-0.5">Clique abaixo para migrar os imóveis e visitas salvos neste navegador para as tabelas criadas no Supabase.</p>
+                </div>
+                
+                <div>
+                  <button 
+                    onClick={handleSyncDataToCloud} 
+                    disabled={syncStatus === 'syncing'}
+                    className="px-5 py-2.5 bg-brand-gold hover:bg-brand-gold-dark text-white text-xs font-bold rounded-lg uppercase tracking-wider flex items-center space-x-2 cursor-pointer"
+                  >
+                    <Icon name="upload" className="h-4 w-4" />
+                    <span>{syncStatus === 'syncing' ? 'Sincronizando...' : 'Enviar Dados para a Nuvem'}</span>
+                  </button>
+                  {syncStatus === 'success' && syncResult && (
+                    <p className="text-xs text-emerald-600 font-bold mt-2 font-mono">
+                      Sucesso! {syncResult.propertiesSynced} imóveis e {syncResult.bookingsSynced} agendamentos integrados.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white border rounded-xl shadow-md p-6 sm:p-8 space-y-4">
+                <div className="flex justify-between items-baseline">
+                  <div>
+                    <h4 className="text-xs font-bold text-stone-900 uppercase font-mono tracking-wider">Script SQL de Inicialização</h4>
+                    <p className="text-xs text-stone-500 mt-0.5">Execute o script abaixo no SQL Editor do seu Supabase para criar as tabelas corretas antes de salvar.</p>
+                  </div>
+                  <button onClick={handleCopySql} className="text-xs text-brand-gold hover:text-brand-gold-dark font-bold underline cursor-pointer">
+                    {copiedSql ? 'Copiado!' : 'Copiar Script SQL'}
+                  </button>
+                </div>
+
+                <pre className="p-4 bg-stone-900 text-emerald-400 font-mono text-[10px] rounded-lg overflow-x-auto max-h-48 border border-stone-950">
+                  {SUPABASE_SQL_SETUP}
+                </pre>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // --- APPLICATION BOOTSTRAP ---
+    const rootElement = document.getElementById("root");
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
+</body>
+</html>
